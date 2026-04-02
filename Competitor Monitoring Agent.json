@@ -1,0 +1,795 @@
+{
+  "name": "Competitor Monitoring Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://www.wayfair.com/rugs/sb0/area-rugs-c215386.html",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        608,
+        -992
+      ],
+      "id": "135b8969-e59b-444a-a571-79da622f2f67",
+      "name": "Fetch Wayfair Rugs Page"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract products from Wayfair's JSON response structure\nconst inputData = $input.first().json;\n\nconsole.log('Input data type:', typeof inputData);\nconsole.log('Input data keys:', Object.keys(inputData));\n\n// Parse JSON if it's a string\nlet jsonData = inputData.data || inputData.body || inputData;\nif (typeof jsonData === 'string') {\n  try {\n    jsonData = JSON.parse(jsonData);\n  } catch (e) {\n    return [{ json: { error: 'Failed to parse JSON', message: e.message } }];\n  }\n}\n\n// Handle array format (like your example)\nif (Array.isArray(jsonData)) {\n  jsonData = jsonData[0];\n}\n\nconsole.log('Working with data structure:', Object.keys(jsonData));\n\n// Extract products from browse.browse_grid_objects\nconst products = [];\n\ntry {\n  const browseData = jsonData.browse;\n  if (!browseData || !browseData.browse_grid_objects) {\n    return [{ json: { error: 'No browse data found', availableKeys: Object.keys(jsonData) } }];\n  }\n\n  const gridObjects = browseData.browse_grid_objects;\n  console.log(`Found ${gridObjects.length} products in browse_grid_objects`);\n\n  gridObjects.forEach((item, index) => {\n    try {\n      // Extract basic product info\n      const title = item.product_name || '';\n      const manufacturer = item.manufacturer || '';\n      const sku = item.sku || '';\n      const url = item.url || '';\n\n      // Extract pricing information\n      let price = '';\n      let listPrice = '';\n      let salePrice = '';\n      let discountPercent = '';\n\n      if (item.raw_pricing_data && item.raw_pricing_data.pricing) {\n        const pricing = item.raw_pricing_data.pricing;\n        \n        // Get display price\n        if (pricing.customerPrice && pricing.customerPrice.display) {\n          price = `$${pricing.customerPrice.display.value}`;\n          salePrice = price;\n        }\n        \n        // Get list price  \n        if (pricing.listPrice && pricing.listPrice.display) {\n          listPrice = `$${pricing.listPrice.display.value}`;\n        }\n        \n        // Get discount percentage\n        if (item.percent_off_amount) {\n          discountPercent = `${item.percent_off_amount}%`;\n        }\n      }\n\n      // Extract image info\n      let imageUrl = '';\n      if (item.image_data && item.image_data.ireid) {\n        imageUrl = `https://assets.wfcdn.com/im/${item.image_data.ireid}/resize-h350-w350%5Ecompr-r85/custom_image.jpg`;\n      }\n\n      // Extract reviews\n      let rating = '';\n      let reviewCount = '';\n      if (item.average_overall_rating) {\n        rating = item.average_overall_rating.toString();\n      }\n      if (item.review_count) {\n        reviewCount = item.review_count.toString();\n      }\n\n      // Extract features/materials\n      const features = item.features_array || [];\n      \n      // Extract shipping info\n      const freeShipping = item.has_free_shipping || false;\n      const shippingText = item.free_ship_text || '';\n      \n      // Extract size options\n      const sizeOptions = item.configured_option_names || [];\n      \n      // Only add products with meaningful data\n      if (title && title.length > 2) {\n        products.push({\n          title: title,\n          manufacturer: manufacturer,\n          sku: sku,\n          url: url,\n          price: price,\n          list_price: listPrice,\n          sale_price: salePrice,\n          discount_percent: discountPercent,\n          image_url: imageUrl,\n          rating: rating,\n          review_count: reviewCount,\n          features: features,\n          size_options: sizeOptions,\n          free_shipping: freeShipping,\n          shipping_text: shippingText,\n          scraped_at: new Date().toISOString()\n        });\n      }\n    } catch (e) {\n      console.log(`Error processing product ${index}:`, e.message);\n    }\n  });\n\n  console.log(`Successfully extracted ${products.length} products`);\n  \n} catch (e) {\n  console.log('Error processing browse data:', e.message);\n  return [{ json: { error: 'Failed to process browse data', message: e.message } }];\n}\n\n// Return products or error message\nreturn products.length > 0 \n  ? products.map(product => ({ json: product }))\n  : [{ json: { message: 'No products found', dataStructure: Object.keys(jsonData) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        -992
+      ],
+      "id": "3650bc28-293d-4b03-8c1f-9158b233894f",
+      "name": "Extract Rugs products"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f5aed1d0-cfc4-403d-a842-d53e0a899d07",
+              "leftValue": "={{ $json.title }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        1024,
+        -992
+      ],
+      "id": "ed2be3ca-f4cb-4f35-a853-b0341642caf4",
+      "name": "Filter Valid Products"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect all products and create final JSON structure\nconst allProducts = $input.all().map(item => item.json);\n\nconst finalOutput = {\n  scrape_info: {\n    source: 'wayfair.com',\n    category: 'rugs',\n    scraped_at: new Date().toISOString(),\n    total_products: allProducts.length,\n    source_url: 'https://www.wayfair.com/rugs-pillows-and-throws/sb0/rugs-c215386.html'\n  },\n  wayfair_products: allProducts\n};\n\nconsole.log(`Final JSON contains ${allProducts.length} products`);\n\nreturn [{ json: finalOutput }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        -992
+      ],
+      "id": "adbb1af1-cad5-4f3d-8830-40ebb720cbe7",
+      "name": "Create Final JSON"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconsole.log(JSON.stringify(data, null, 2));\nreturn [{ json: data }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        -992
+      ],
+      "id": "ccd4ec81-10cb-4f30-b754-949e15e36164",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  // Remove duplicates from product_links array\n  const uniqueLinks = [...new Set($input.first().json.product_links)];\n  \n  // Add base URL to make complete URLs\n  const fullUrls = uniqueLinks.map(link => {\n    if (link.startsWith('/')) {\n      return `https://www.amazon.com${link}`;\n    }\n    return link; // in case it's already a full URL\n  });\n  \n  // Update the item with processed URLs\n  item.json.product_links = fullUrls;\n}\n\nreturn $input.all();\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        320
+      ],
+      "id": "0babe782-53b8-4480-9dd8-66771d3c03c6",
+      "name": "Make Amazon accessible URL1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split the URLs into individual items for processing one by one\nconst productLinks = $input.first().json.product_links;\nconst results = [];\n\nfor (const link of productLinks) {\n  results.push({\n    url: link\n  });\n}\n\nreturn results.map(r => ({ json: r })).slice(0,10);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        320
+      ],
+      "id": "4af5e9dd-eebd-494f-b7b4-3051dafdbc5e",
+      "name": "Split URLs1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cheerio = require('cheerio');\nconst results = [];\n\nfor (const item of $input.all()) {\n  try {\n    const url = item.json.url;\n    const html = item.json.data;\n    const $ = cheerio.load(html);\n    \n    const name = $('#productTitle').text().trim();\n    const price = $('span.a-price span.a-price-whole').first().text().trim();\n    \n    const details = [];\n    $('#feature-bullets ul.a-unordered-list li span.a-list-item').each((i, el) => {\n      const text = $(el).text().trim();\n      if (text && text.length > 0) {\n        details.push(text);\n      }\n    });\n    \n    const pattern = $('#inline-twister-expanded-dimension-text-pattern_name').text().trim();\n    \n    results.push({\n      url,\n      name,\n      price,\n      details,\n      pattern,\n      scraped_at: new Date().toISOString()\n    });\n  } catch (error) {\n    console.error('Error processing item:', error);\n    results.push({\n      url: item.json.url || 'Unknown URL',\n      name: '',\n      price: '',\n      details: [],\n      pattern: '',\n      error: error.message,\n      scraped_at: new Date().toISOString()\n    });\n  }\n}\n\n// Return a single item containing all scraped data as an array\nreturn [{\n  json: {\n    products: results,\n    total_scraped: results.length,\n    successful_scrapes: results.filter(r => !r.error).length,\n    failed_scrapes: results.filter(r => r.error).length,\n    batch_scraped_at: new Date().toISOString()\n  }\n}];\nfor (const item of $input.all()) {\n  try {\n    const url = item.json.url;\n    const html = item.json.data;\n    const $ = cheerio.load(html);\n    \n    const name = $('#productTitle').text().trim();\n    const price = $('span.a-price span.a-price-whole').first().text().trim();\n    \n    const details = [];\n    $('#feature-bullets ul.a-unordered-list li span.a-list-item').each((i, el) => {\n      const text = $(el).text().trim();\n      if (text && text.length > 0) {\n        details.push(text);\n      }\n    });\n    \n    const pattern = $('#inline-twister-expanded-dimension-text-pattern_name').text().trim();\n    \n    results.push({\n      url,\n      name,\n      price,\n      details,\n      pattern,\n      scraped_at: new Date().toISOString()\n    });\n  } catch (error) {\n    console.error('Error processing item:', error);\n    results.push({\n      url: item.json.url || 'Unknown URL',\n      name: '',\n      price: '',\n      details: [],\n      pattern: '',\n      error: error.message,\n      scraped_at: new Date().toISOString()\n    });\n  }\n}\n\n// Return a single item containing all scraped data as an array\nreturn [{\n  json: {\n    products: results,\n    total_scraped: results.length,\n    successful_scrapes: results.filter(r => !r.error).length,\n    failed_scrapes: results.filter(r => r.error).length,\n    batch_scraped_at: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1984,
+        320
+      ],
+      "id": "35948755-1a3d-4eea-9379-91483d890485",
+      "name": "Amazon Scraper2",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## Scraping\n",
+        "height": 720,
+        "width": 2112,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        48,
+        -112
+      ],
+      "typeVersion": 1,
+      "id": "9d74f122-8399-4efe-830d-a4bd5f3a635a",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get input JSON\nlet inputData = $input.first().json;\n\n// Get Amazon collection links safely\nlet amazonCollections = (inputData.amazon_collections || []).map(l => l.trim().replace(/,+$/, \"\")).filter(Boolean);\n\n// Return each Amazon collection link as its own object\nreturn amazonCollections.map(link => ({\n    json: { url: link }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        320
+      ],
+      "id": "d7818423-4c9e-4fbe-906a-7f713c5a1be5",
+      "name": "Amazon collections"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get input JSON\nlet inputData = $input.first().json;\n\n// Function to clean links (remove trailing commas and whitespace)\nfunction cleanLinks(links) {\n    return (links || []).map(l => l.trim().replace(/,+$/, \"\")).filter(Boolean);\n}\n\n// Extract Amazon links: support old 'amazon' array or already separated arrays\nlet allAmazonLinks = [];\nif (inputData.amazon) {\n    allAmazonLinks = cleanLinks(inputData.amazon);\n} else {\n    // If already split arrays exist, merge them\n    allAmazonLinks = cleanLinks([...(inputData.amazon_products || []), ...(inputData.amazon_collections || [])]);\n}\n\n// Classify links: \n// Products have /dp/ or /gp/product/\n// Collections have /gp/bestsellers/ or /s?\nlet amazon_products = [];\nlet amazon_collections = [];\n\nallAmazonLinks.forEach(link => {\n    if (/\\/dp\\/|\\/gp\\/product\\//.test(link)) {\n        amazon_products.push(link);\n    } else if (/\\/gp\\/bestsellers\\/|\\/s\\?/.test(link)) {\n        amazon_collections.push(link);\n    }\n});\n\n// Return only Amazon products and collections\nreturn [\n    {\n        json: {\n            amazon_products,\n            amazon_collections\n        }\n    }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        96
+      ],
+      "id": "4dcd8b05-46cb-42d9-9137-6a224e50633c",
+      "name": "Amazon scraper"
+    },
+    {
+      "parameters": {
+        "jsCode": "let inputText = $input.first().json.chatInput || $('When chat message received').first().json.chatInput;\n\n// Regex patterns\nconst walmartRegex = /(https?:\\/\\/(?:www\\.)?walmart\\.com\\/[^\\s]+)/gi;\nconst amazonRegex = /(https?:\\/\\/(?:www\\.)?amazon\\.[a-z.]+\\/[^\\s]+)/gi;\n\n// Extract all links\nlet walmartLinks = inputText.match(walmartRegex) || [];\nlet amazonLinks = inputText.match(amazonRegex) || [];\n\n// Function to classify links\nfunction classifyLinks(links, productPattern, collectionPattern) {\n    let products = [];\n    let collections = [];\n    for (let link of links) {\n        if (productPattern.test(link)) {\n            products.push(link);\n        } else if (collectionPattern.test(link)) {\n            collections.push(link);\n        } else {\n            // Unknown type, you can log or ignore\n        }\n    }\n    return { products, collections };\n}\n\n// Walmart: products have /ip/, collections /search?q=/ or /browse/\nlet walmartClassified = classifyLinks(walmartLinks, /\\/ip\\//, /\\/search\\?q=|\\/browse\\//);\n\n// Amazon: products have /dp/ or /gp/product/, collections /gp/bestsellers/ or /s?\nlet amazonClassified = classifyLinks(amazonLinks, /\\/dp\\/|\\/gp\\/product\\//, /\\/gp\\/bestsellers\\/|\\/s\\?/);\n\n// Return grouped arrays\nreturn [\n    {\n        json: {\n            walmart_products: walmartClassified.products,\n            walmart_collections: walmartClassified.collections,\n            amazon_products: amazonClassified.products,\n            amazon_collections: amazonClassified.collections\n        }\n    }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        176,
+        176
+      ],
+      "id": "3741e1d7-c63f-4c46-b5e8-6d57ab7a1ace",
+      "name": "Find URLs"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "i18n-prefs=USD; lc-main=en_US; session-id=141-8209501-9981461; session-id-time=2082787201l; ubid-main=134-5719883-5851066"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        944,
+        320
+      ],
+      "id": "20e39d0b-4112-4413-b8b5-8c3f2aab0355",
+      "name": "Get HTML of website"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        320
+      ],
+      "id": "bb2fcfa8-ba5b-4ef7-ab78-240643ed77e5",
+      "name": "URL wise HTML gather",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "product_links",
+              "cssSelector": "div div a[href*='/dp/']",
+              "returnValue": "attribute",
+              "attribute": "href",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9051d79d-eca2-4d14-a8ad-8ff71ef24644",
+      "name": "Extract Amazon Product URLs",
+      "type": "n8n-nodes-base.html",
+      "position": [
+        1152,
+        320
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        976,
+        0
+      ],
+      "id": "b8f2cf17-ce50-4c77-907a-018d2a80f11e",
+      "name": "Get HTML Content",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get input JSON\nlet inputData = $input.first().json;\n\n// Get Amazon product links safely\nlet amazonProducts = (inputData.amazon_products || []).map(l => l.trim().replace(/,+$/, \"\")).filter(Boolean);\n\n// Return each Amazon product link as its own object\nreturn amazonProducts.map(link => ({\n    json: { url: link }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "6b22e51e-b653-42c5-b82d-de1009b2134a",
+      "name": "Amazon Products",
+      "alwaysOutputData": true,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const cheerio = require('cheerio');\nconst results = [];\n\nfor (const item of $input.all()) {\n  try {\n    const url = item.json.url;\n    const html = item.json.data;\n    const $ = cheerio.load(html);\n    \n    const name = $('#productTitle').text().trim();\n    const price = $('span.a-price span.a-price-whole').first().text().trim();\n    \n    const details = [];\n    $('#feature-bullets ul.a-unordered-list li span.a-list-item').each((i, el) => {\n      const text = $(el).text().trim();\n      if (text && text.length > 0) {\n        details.push(text);\n      }\n    });\n    \n    const pattern = $('#inline-twister-expanded-dimension-text-pattern_name').text().trim();\n    \n    results.push({\n      url,\n      name,\n      price,\n      details,\n      pattern,\n      scraped_at: new Date().toISOString()\n    });\n  } catch (error) {\n    console.error('Error processing item:', error);\n    results.push({\n      url: item.json.url || 'Unknown URL',\n      name: '',\n      price: '',\n      details: [],\n      pattern: '',\n      error: error.message,\n      scraped_at: new Date().toISOString()\n    });\n  }\n}\n\n// Return a single item containing all scraped data as an array\nreturn [{\n  json: {\n    products: results,\n    total_scraped: results.length,\n    successful_scrapes: results.filter(r => !r.error).length,\n    failed_scrapes: results.filter(r => r.error).length,\n    batch_scraped_at: new Date().toISOString()\n  }\n}];\nfor (const item of $input.all()) {\n  try {\n    const url = item.json.url;\n    const html = item.json.data;\n    const $ = cheerio.load(html);\n    \n    const name = $('#productTitle').text().trim();\n    const price = $('span.a-price span.a-price-whole').first().text().trim();\n    \n    const details = [];\n    $('#feature-bullets ul.a-unordered-list li span.a-list-item').each((i, el) => {\n      const text = $(el).text().trim();\n      if (text && text.length > 0) {\n        details.push(text);\n      }\n    });\n    \n    const pattern = $('#inline-twister-expanded-dimension-text-pattern_name').text().trim();\n    \n    results.push({\n      url,\n      name,\n      price,\n      details,\n      pattern,\n      scraped_at: new Date().toISOString()\n    });\n  } catch (error) {\n    console.error('Error processing item:', error);\n    results.push({\n      url: item.json.url || 'Unknown URL',\n      name: '',\n      price: '',\n      details: [],\n      pattern: '',\n      error: error.message,\n      scraped_at: new Date().toISOString()\n    });\n  }\n}\n\n// Return a single item containing all scraped data as an array\nreturn [{\n  json: {\n    products: results,\n    total_scraped: results.length,\n    successful_scrapes: results.filter(r => !r.error).length,\n    failed_scrapes: results.filter(r => r.error).length,\n    batch_scraped_at: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1952,
+        0
+      ],
+      "id": "b675dc9c-ab68-4f56-aceb-175d51db6b63",
+      "name": "Get Amazon Product Detail",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        384,
+        432
+      ],
+      "id": "c7f86c24-9199-48c3-b7d1-897ae11597dc",
+      "name": "Wait",
+      "webhookId": "932b795a-d58e-4d66-b877-3f3e8d38a31c"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -192,
+        160
+      ],
+      "id": "1d028fa1-c1b6-4226-8d79-01bab6d90b55",
+      "name": "When chat message received",
+      "webhookId": "7c45c1c7-6274-4ff0-8e74-b99ba5c3faab"
+    },
+    {
+      "parameters": {
+        "content": "## Wayfair Scraping \n",
+        "height": 432,
+        "width": 2176,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -64,
+        -1136
+      ],
+      "typeVersion": 1,
+      "id": "2e877fbd-6722-4831-b20f-e705633e1e10",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2400,
+        -32
+      ],
+      "id": "61d205e8-19b4-47dc-a81b-34bd7a946af4",
+      "name": "Merge 1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2688,
+        -832
+      ],
+      "id": "65491143-7610-4b5c-8fca-9c5ef32fb218",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Please analyze the following rug data: {{ $json.wayfair_products }}",
+        "options": {
+          "systemMessage": "Competitive Intelligence Agent - Rugs Category\nYou are Wayfair's competitive intelligence analyst. Your job: analyze competitor data, identify gaps, and deliver clear actions.\n\nYour Three Missions\nMISSION 1: Product Feature Analysis\nInput: Wayfair product specs + competitor specs (Amazon, Target)\nTask: Compare materials, construction, and features. Find what we're missing and what we can promote.\nOutput Format:\nFEATURE GAP REPORT\n\nGap #1: [Feature name]\n- Competitor has: [Specific feature/spec]\n- Wayfair has: [What we currently offer]\n- Impact: [Why this matters - sales/returns/reviews]\n- Action: [Specific fix - add feature, update copy, source new product]\n- Priority: HIGH/MEDIUM/LOW\n- Timeline: [Days to implement]\n\nGap #2: [Next feature]\n...\nExample:\nGap #1: Stain Protection Treatment\n- Amazon has: Scotchgard branding on 65% of synthetic rugs, prominent badge\n- Wayfair has: Generic \"easy clean\" language, no branded treatment\n- Impact: Stain complaints in 47% of negative reviews; losing $2.3M annually\n- Action: \n  1. Partner with Scotchgard - license for top 50 SKUs (60 days)\n  2. Update copy immediately to highlight existing stain resistance (2 days)\n  3. Create \"Spill-Proof Collection\" landing page (7 days)\n- Priority: HIGH\n- Timeline: Start in 2 days, complete in 60 days\n\nMISSION 2: Pricing Strategy\nInput: Wayfair prices + competitor prices + product specs\nTask: Determine if Wayfair is cheaper, premium, or parity. Calculate exact price differences. Recommend specific pricing actions.\nOutput Format:\nPRICING ACTION REPORT\n\nSegment: [Product category/size/price range]\nWayfair: $XXX average (range: $XX-$XX)\nAmazon: $XXX average\nTarget: $XXX average\nPosition: [Premium +X% / Parity / Value -X%]\n\nPrice Gap Analysis:\n- Wayfair vs. Amazon: [+/- X%]\n- Wayfair vs. Target: [+/- X%]\n- Quality-adjusted: [Are we comparing equal products? Yes/No]\n- Shipping included: [Note if competitors add shipping at checkout]\n\nRecommended Action: [Choose ONE]\n□ PRICE DOWN: Reduce to $XXX (X% decrease) - match competitor + maintain margin\n□ PRICE UP: Increase to $XXX (X% increase) - we're underpriced for quality\n□ MAINTAIN + VALUE MESSAGE: Keep price, add \"Free shipping = $XX savings\" badge\n□ BUNDLE: Keep price, add $XX rug pad (cost: $X, perceived value: $XX)\n□ PROMOTE: Run X% off for X days to clear inventory/drive volume\n\nFinancial Impact:\n- Revenue: [+/- $XX,XXX monthly]\n- Margin: [X% before → X% after]\n- Volume: [+/- XXX units monthly]\n- Break-even: [X days/units]\n\nPriority: HIGH/MEDIUM/LOW\nExecute: IMMEDIATE / 30 DAYS / 90 DAYS\nExample:\nSegment: 8x10 Synthetic Area Rugs ($150-$300)\nWayfair: $247 average (range: $189-$299) \nAmazon: $189 average (+ $15-30 shipping)\nTarget: $199 average\nPosition: Premium +28% vs Amazon, +24% vs Target\n\nPrice Gap Analysis:\n- Wayfair vs. Amazon: +31% (but Amazon adds shipping = +18% real gap)\n- Wayfair vs. Target: +24%\n- Quality-adjusted: Equal materials/construction - no quality advantage\n- Shipping included: YES (Wayfair shipping included, adds $20-25 value)\n\nRecommended Action:\n☑ PRICE DOWN: Reduce to $205 average (17% decrease)\n  - Match Amazon true cost (price + shipping)\n  - Add \"Shipping Included - $25 Savings\" badge\n  - Update SEO: \"best price 8x10 synthetic rugs\"\n\nFinancial Impact:\n- Revenue: +$187K monthly (34% more volume × 83% price = +10% revenue)\n- Margin: 42% → 39% (still profitable, above 30% floor)\n- Volume: +640 units monthly (1,880 → 2,520)\n- Break-even: Immediate (volume gain offsets margin loss)\n\nPriority: HIGH\nExecute: IMMEDIATE (48-hour price change)\n\nMISSION 3: Brand & Content Strategy\nInput: Wayfair product pages + competitor product pages (copy, photos, layout)\nTask: Compare messaging tone, photography style, and keywords. Recommend ONE copy change and ONE visual change.\nOutput Format:\nCONTENT STRATEGY REPORT\n\nCOPY ANALYSIS\n--------------\nWayfair tone: [Describe in 5 words]\nWayfair top keywords: [List 10 most frequent words]\n\nAmazon tone: [Describe in 5 words]\nAmazon top keywords: [List 10 most frequent words]\n\nTarget tone: [Describe in 5 words]  \nTarget top keywords: [List 10 most frequent words]\n\nGap: [What are competitors doing that we're not?]\n\nVISUAL ANALYSIS\n---------------\nWayfair photos: [Count: X lifestyle, X white background, X detail shots]\nWayfair style: [Describe aesthetic - e.g., \"sterile staging, perfect symmetry\"]\n\nAmazon photos: [Count breakdown]\nAmazon style: [Describe]\n\nTarget photos: [Count breakdown]\nTarget style: [Describe]\n\nGap: [What visual approach works better for competitors?]\n\nRECOMMENDATIONS\n---------------\n\nCopy Change #1:\nCurrent: [Exact current Wayfair copy - 1-2 sentences]\nNew: [Exact proposed copy - 1-2 sentences]\nWhy: [One-sentence reason this improves conversion]\nImpact: [Expected % lift in conversion/engagement]\nImplement: [X days]\n\nVisual Change #1:\nCurrent: [Describe current photo approach]\nNew: [Describe exact new approach]\nWhy: [One-sentence reason this improves conversion]\nImpact: [Expected % lift in conversion/engagement]\nCost: [$X for photography/editing]\nImplement: [X days]\nExample:\nCONTENT STRATEGY REPORT\n\nCOPY ANALYSIS\n--------------\nWayfair tone: Functional, spec-focused, flat, generic, corporate\nWayfair top keywords: durable, polypropylene, machine-woven, pile height, stain-resistant, easy maintenance, multiple sizes, jute backing, low profile, contemporary\n\nAmazon tone: Clinical, bullet-pointed, data-only, transactional, minimal\nAmazon top keywords: Prime eligible, free returns, dimensions, material, ratings, best seller, verified purchase, customer reviews, specifications, warranty\n\nRugs USA tone: Inspirational, design-forward, storytelling, aspirational, expert\nRugs USA top keywords: artisan, handcrafted, vintage-inspired, bohemian charm, curated, heritage, timeless, elevate, transform, sophisticated\n\nGap: Competitors either focus on pure utility (Amazon) or design storytelling (Rugs USA). Wayfair is stuck in middle - not compelling enough. We need emotional connection + design authority.\n\nVISUAL ANALYSIS\n---------------\nWayfair photos: 3 lifestyle (generic staging), 2 white background, 1 detail\nWayfair style: Professionally staged but sterile - symmetrical furniture, no personal items, hotel-like, single aesthetic (modern minimal)\n\nAmazon photos: 1 lifestyle (stock photo), 3 white background, 8 user-submitted\nAmazon style: Minimal curation - prioritizes angles/details over inspiration; user photos authentic but low quality\n\nRugs USA photos: 6 lifestyle, 2 white background, 3 detail, 4 room variations  \nRugs USA style: Multiple room contexts, diverse aesthetics (boho/modern/traditional), looks lived-in, relatable\n\nGap: Wayfair shows \"one perfect room\" - customers can't visualize in THEIR space. Rugs USA shows versatility across room types. Amazon wins on authenticity through user photos (despite quality issues).\n\nRECOMMENDATIONS\n---------------\n\nCopy Change #1:\nCurrent: \"This machine-woven area rug is crafted from durable polypropylene fibers. Features a low pile height of 0.4 inches and jute backing. Stain-resistant treatment ensures easy maintenance.\"\n\nNew: \"Inspired by mid-century Scandinavian design, this area rug transforms high-traffic spaces with sophisticated simplicity. The low-profile weave (0.4\") slides under furniture while durable polypropylene stands up to spills, pets, and daily chaos. Stain-resistant finish means coffee spills wipe clean in seconds - practical luxury for real life.\"\n\nWhy: Connects features to customer outcomes; adds design authority; creates emotional pull\nImpact: +15% conversion rate (story-driven copy tested on similar products)\nImplement: 2 days (copy update only, no design changes)\n\nVisual Change #1:\nCurrent: Single staged room - modern living room, symmetrical layout, no personal items\nNew: Add 3 \"real home\" photos - small apartment, family room with toys visible, traditional dining room. Each captioned with \"Emma's Studio | Chicago | 450 sq ft\"\n\nWhy: Shows versatility + helps customers visualize in spaces like theirs\nImpact: +20% conversion (+35% engagement with photo gallery)\nCost: $250 per home × 3 homes = $750 (customer-submitted photography program)\nImplement: 14 days (recruit customers, shoot, upload)\n\nCritical Rules\n\nBe specific: No vague recommendations. Give exact prices, exact copy, exact actions.\nQuantify everything: Revenue impact, margin %, units, days to implement.\nPrioritize ruthlessly: HIGH = do immediately. MEDIUM = do this month. LOW = do this quarter.\nOne output per mission: Don't combine reports. Keep them separate and focused.\nShow your work: Include competitor data that led to each conclusion.\nAction-oriented: Every finding must have a clear \"do this\" recommendation."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        3152,
+        -832
+      ],
+      "id": "cff4981c-3219-46b0-afb1-e83fa82bca56",
+      "name": "Analyze All Data",
+      "executeOnce": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        3152,
+        -608
+      ],
+      "id": "9349f2a3-8e07-4b31-ac43-e15787247059",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "cgjkvKXaxihmpWPs",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let html = $input.first().json.output;\n\n// Remove markdown fences like ```html or ```\nhtml = html.replace(/```html|```/g, \"\");\n\n// Remove escaped newline/tab characters and excess whitespace\nhtml = html.replace(/\\\\[nrt]/g, \" \").replace(/\\s{2,}/g, \" \");\n\n// Convert basic markdown syntax inside text to HTML\nhtml = html\n  // Bold **text** or __text__\n  .replace(/\\*\\*(.*?)\\*\\*/g, \"<strong>$1</strong>\")\n  .replace(/__(.*?)__/g, \"<strong>$1</strong>\")\n  // Italic *text* or _text_\n  .replace(/(?<!\\*)\\*(?!\\*)(.*?)\\*(?<!\\*)/g, \"<em>$1</em>\")\n  .replace(/_(.*?)_/g, \"<em>$1</em>\")\n  // Headings ##, ###, etc. (optional)\n  .replace(/^###\\s*(.*)$/gm, \"<h3>$1</h3>\")\n  .replace(/^##\\s*(.*)$/gm, \"<h2>$1</h2>\")\n  .replace(/^#\\s*(.*)$/gm, \"<h1>$1</h1>\")\n  // Bullet points or dashes\n  .replace(/^\\s*[-*]\\s+(.*)$/gm, \"<li>$1</li>\")\n  .replace(/(<li>.*<\\/li>)/gs, \"<ul>$1</ul>\");\n\n// Remove duplicate or misplaced <html>/<body> wrappers\nhtml = html\n  .replace(/<\\/?body><\\/?body>/g, \"\")\n  .replace(/<\\/?html><\\/?html>/g, \"\")\n  .replace(/<body><!DOCTYPE html>/g, \"<!DOCTYPE html>\");\n\n// Trim leading/trailing spaces\nhtml = html.trim();\n\n// Ensure it’s wrapped in a proper HTML structure\nif (!html.startsWith(\"<!DOCTYPE html>\")) {\n  html = `<!DOCTYPE html><html><body>${html}</body></html>`;\n}\n\n// Return clean, formatted HTML\nreturn [{ json: { cleaned_minified_html: html } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        -832
+      ],
+      "id": "85230845-2b80-45c9-9467-27aaaf7393e1",
+      "name": "Clean Ai Output"
+    },
+    {
+      "parameters": {
+        "content": "## Analyze data\n",
+        "height": 496,
+        "width": 528,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3040,
+        -928
+      ],
+      "typeVersion": 1,
+      "id": "b68c5489-dd0b-406c-9efa-271593e31377",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $input.first().json.cleaned_minified_html;\nconst buffer = Buffer.from(text, 'utf8');\nconst binaryData = {\n  data: buffer.toString('base64'),\n  mimeType: 'application/octet-stream',\n  fileName: 'file.html',\n};\nitems[0].binary = { data: binaryData };\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3872,
+        -832
+      ],
+      "id": "1b09bfee-b5b9-4e80-9747-a6cc989855e9",
+      "name": "Download HTML File from Here"
+    },
+    {
+      "parameters": {
+        "content": "## Also download HTML file here \n",
+        "height": 400,
+        "width": 368,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3760,
+        -912
+      ],
+      "typeVersion": 1,
+      "id": "d09195c0-eea7-44ba-9040-ca6522bbfeae",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "html": "{{ $json.cleaned_minified_html }}"
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        4240,
+        -832
+      ],
+      "id": "d2d2f705-2fba-49fb-bc7e-24ec7141081a",
+      "name": "See HTML Output Here"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Fetch Wayfair Rugs Page": {
+      "main": [
+        [
+          {
+            "node": "Extract Rugs products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Rugs products": {
+      "main": [
+        [
+          {
+            "node": "Filter Valid Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Valid Products": {
+      "main": [
+        [
+          {
+            "node": "Create Final JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Final JSON": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make Amazon accessible URL1": {
+      "main": [
+        [
+          {
+            "node": "Split URLs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split URLs1": {
+      "main": [
+        [
+          {
+            "node": "URL wise HTML gather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Amazon collections": {
+      "main": [
+        [
+          {
+            "node": "Get HTML of website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Amazon scraper": {
+      "main": [
+        [
+          {
+            "node": "Amazon Products",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Amazon collections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find URLs": {
+      "main": [
+        [
+          {
+            "node": "Amazon scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get HTML of website": {
+      "main": [
+        [
+          {
+            "node": "Extract Amazon Product URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "URL wise HTML gather": {
+      "main": [
+        [
+          {
+            "node": "Amazon Scraper2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Amazon Product URLs": {
+      "main": [
+        [
+          {
+            "node": "Make Amazon accessible URL1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get HTML Content": {
+      "main": [
+        [
+          {
+            "node": "Get Amazon Product Detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Amazon Products": {
+      "main": [
+        [
+          {
+            "node": "Get HTML Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        []
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Fetch Wayfair Rugs Page",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Find URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Amazon Product Detail": {
+      "main": [
+        [
+          {
+            "node": "Merge 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Amazon Scraper2": {
+      "main": [
+        [
+          {
+            "node": "Merge 1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge 1": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Analyze All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Analyze All Data",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze All Data": {
+      "main": [
+        [
+          {
+            "node": "Clean Ai Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Ai Output": {
+      "main": [
+        [
+          {
+            "node": "Download HTML File from Here",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download HTML File from Here": {
+      "main": [
+        [
+          {
+            "node": "See HTML Output Here",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "968b9a88-a2cb-460a-acc3-108a16e9e71f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0a6da5cd3e9852974c53688e5e7a872e5e23624c498e5111a62832f1f36a802b"
+  },
+  "id": "Sgei4v2Ltjuk0rNz",
+  "tags": []
+}
